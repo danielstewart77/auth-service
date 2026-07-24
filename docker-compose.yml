@@ -1,0 +1,15 @@
+services:
+  auth:
+    build: .
+    container_name: auth-service
+    restart: unless-stopped
+    ports:
+      - "8600:8600"
+    env_file: .env
+    environment:
+      - AUTH_HOST=0.0.0.0
+      # Parent domain shared by every personal site, so the session cookie
+      # issued here is valid on all owner.sparktobloom.com-style subdomains.
+      - AUTH_COOKIE_DOMAIN=sparktobloom.com
+    volumes:
+      - ./db:/app/db
