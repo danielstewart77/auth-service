@@ -27,7 +27,7 @@ settings = load()
 registry = registry_mod.Registry(settings.db_path)
 seed_mod.seed(registry, settings)
 
-app = FastAPI(title="auth-service")
+app = FastAPI(title="auth-service", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 class Login(BaseModel):
