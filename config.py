@@ -43,6 +43,12 @@ class Settings:
     seed_username: str = field(default_factory=lambda: os.getenv("AUTH_SEED_USERNAME", ""))
     seed_password: str = field(default_factory=lambda: os.getenv("AUTH_SEED_PASSWORD", ""))
 
+    # Service bearer for the /admin routes (user and group management). The
+    # hive console holds it. Unset means the /admin routes refuse with 503.
+    admin_token: str = field(
+        default_factory=lambda: os.getenv("AUTH_SERVICE_ADMIN_TOKEN", "").strip()
+    )
+
     # Password-reset delivery. Left unset in local dev — the request endpoint
     # then logs the token server-side instead of emailing it.
     smtp_host: str = field(default_factory=lambda: os.getenv("SMTP_HOST", ""))
