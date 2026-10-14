@@ -195,6 +195,18 @@ def test_reenabled_user_signs_in_again(client):
     assert _login(client, "sloan", "temp-pw-1").status_code == 200
 
 
+def test_a_token_issued_before_a_disable_stays_refused_after_re_enable(client):
+    _create(client, "sloan")
+    client.put("/admin/users/sloan/sites/hive", headers=ADMIN)
+    token = _token(client, "sloan", "temp-pw-1")
+    client.patch("/admin/users/sloan", json={"disabled": True}, headers=ADMIN)
+    client.patch("/admin/users/sloan", json={"disabled": False}, headers=ADMIN)
+
+    assert client.get("/verify", params={"site": "hive"}, headers=_bearer(token)).status_code == 401
+    fresh = _token(client, "sloan", "temp-pw-1")
+    assert client.get("/verify", params={"site": "hive"}, headers=_bearer(fresh)).status_code == 200
+
+
 def test_disabled_user_with_a_token_is_refused_by_verify(client):
     """A token that survived the disable (written straight to the db) still fails."""
     import auth
@@ -293,6 +305,19 @@ def test_verify_without_site_admits_only_admins(client):
     assert body["groups"] == ["admins"]
     assert body["must_change"] is False
     assert set(body) >= {"user_id", "username", "email", "must_change", "groups"}
+
+
+def test_a_user_created_with_sites_is_granted_them_in_the_same_call(client):
+    resp = client.post(
+        "/admin/users",
+        json={"username": "sloan", "temp_password": "temp-pw-1", "sites": [" Hive "]},
+        headers=ADMIN,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["sites"] == ["hive"]
+    sloan = _token(client, "sloan", "temp-pw-1")
+    assert client.get("/verify", params={"site": "hive"}, headers=_bearer(sloan)).status_code == 200
+    assert client.get("/verify", params={"site": "btc"}, headers=_bearer(sloan)).status_code == 403
 
 
 def test_verify_with_site_admits_granted_and_refuses_ungranted(client):

@@ -63,6 +63,7 @@ class NewUser(BaseModel):
     username: str
     email: str | None = None
     temp_password: str | None = None
+    sites: list[str] = []
 
 
 class UserPatch(BaseModel):
@@ -269,12 +270,17 @@ admin = [Depends(_require_admin)]
 @app.post("/admin/users", status_code=201, dependencies=admin)
 def admin_create_user(body: NewUser) -> dict:
     """A temp password means must change on first sign-in; none means no
-    password sign-in at all (an account for Microsoft/Windows sign-in)."""
+    password sign-in at all (an account for Microsoft/Windows sign-in).
+    `sites` are granted in the same write, so a created user is never left
+    without the grant the caller asked for."""
     username = body.username.strip().lower()
     if not username:
         raise HTTPException(400, "username must not be empty")
     if body.temp_password is not None and not body.temp_password:
         raise HTTPException(400, "temp_password must not be empty")
+    sites = [site.strip().lower() for site in body.sites]
+    if not all(sites):
+        raise HTTPException(400, "a site must not be empty")
     password_hash = auth.hash_password(body.temp_password) if body.temp_password else None
     try:
         user = registry.create_user(
@@ -282,6 +288,7 @@ def admin_create_user(body: NewUser) -> dict:
             password_hash,
             email=(body.email or "").strip(),
             must_change=password_hash is not None,
+            sites=sites,
         )
     except registry_mod.Conflict as exc:
         raise HTTPException(409, str(exc)) from exc

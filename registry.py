@@ -8,7 +8,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 _SCHEMA_PATH = Path(__file__).resolve().parent / "db" / "schema.sql"
 
@@ -148,8 +148,13 @@ class Registry:
         password_hash: str | None,
         email: str = "",
         must_change: bool = False,
+        sites: Iterable[str] = (),
     ) -> dict[str, Any]:
-        """Insert a user. Raises Conflict on a taken username or email."""
+        """Insert a user and its site grants in one transaction.
+
+        Raises Conflict on a taken username or email, and then nothing —
+        neither the user nor any grant — is written.
+        """
         user_id = str(uuid.uuid4())
         try:
             with self._tx() as c:
@@ -157,6 +162,10 @@ class Registry:
                     "INSERT INTO users (user_id, username, email, password_hash,"
                     " created_at, must_change) VALUES (?, ?, ?, ?, ?, ?)",
                     (user_id, username, email or "", password_hash, _now(), int(must_change)),
+                )
+                c.executemany(
+                    "INSERT OR IGNORE INTO site_grants (user_id, site) VALUES (?, ?)",
+                    [(user_id, site) for site in sites],
                 )
         except sqlite3.IntegrityError as exc:
             raise Conflict("username or email already in use") from exc

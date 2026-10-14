@@ -62,7 +62,8 @@ Set `AUTH_COOKIE_DOMAIN` to the parent domain covering every personal site
 Admin: `POST|GET /admin/users`, `GET|PATCH /admin/users/{username}`,
 `POST /admin/users/{username}/reset`, `PUT|DELETE
 /admin/users/{username}/sites/{site}`, `GET|POST /admin/groups`,
-`PUT|DELETE /admin/groups/{name}/members/{username}`.
+`PUT|DELETE /admin/groups/{name}/members/{username}`. `POST /admin/users`
+takes `sites` alongside the username, and grants them in the same write.
 
 ## Test
 
