@@ -1,10 +1,30 @@
 # auth-service
 
 Shared login for Daniel's personal sites (backlog, property lens, btc, apps,
-and whatever comes next). One FastAPI app, one sqlite db, one account today.
-Each site stays a thin client: read the `auth_session` cookie off the
-incoming request, call `GET /verify` to find out who it belongs to, redirect
-to login if it's missing or invalid.
+the hive console). One FastAPI app, one sqlite db. Each site stays a thin
+client: read the `auth_session` cookie off the incoming request, call
+`GET /verify` to find out who it belongs to, redirect to login if it's
+missing or invalid.
+
+## Users, groups and sites
+
+Membership of the `admins` group is the admin role. `GET /verify` with no
+`site` admits admins only, so every site that does not name itself stays
+the admins' alone however many users exist. `GET /verify?site=<name>` admits
+admins and users granted that site. A disabled user is refused everywhere,
+and disabling, an admin reset or a password change ends the user's sessions.
+The last enabled admin cannot be disabled or taken out of `admins`. Users
+are never deleted.
+
+`/admin/*` manages users, groups and site grants behind the service bearer
+`AUTH_SERVICE_ADMIN_TOKEN`. An admin-created user with a temporary password
+must change it (`POST /password/change`) — `must_change` is reported on
+`/login` and `/verify`, and the calling site enforces it. A user created
+without a password cannot sign in by password at all.
+
+On startup the db is brought up to the current schema in place; on a db
+that predates groups the `admins` group is created with the account
+`AUTH_SEED_USERNAME` names as its one member.
 
 ## Run
 
@@ -36,8 +56,13 @@ Set `AUTH_COOKIE_DOMAIN` to the parent domain covering every personal site
 
 ## Endpoints
 
-`POST /login`, `POST /logout`, `GET /verify`, `POST /password/reset/request`,
-`POST /password/reset/confirm`, `GET /health`.
+`POST /login`, `POST /logout`, `GET /verify[?site=]`, `POST /password/change`,
+`POST /password/reset/request`, `POST /password/reset/confirm`, `GET /health`.
+
+Admin: `POST|GET /admin/users`, `GET|PATCH /admin/users/{username}`,
+`POST /admin/users/{username}/reset`, `PUT|DELETE
+/admin/users/{username}/sites/{site}`, `GET|POST /admin/groups`,
+`PUT|DELETE /admin/groups/{name}/members/{username}`.
 
 ## Test
 
