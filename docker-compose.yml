@@ -13,3 +13,11 @@ services:
       - AUTH_COOKIE_DOMAIN=sparktobloom.com
     volumes:
       - ./db:/app/db
+    # The hive console and terminal reach it as http://auth-service:8600.
+    networks:
+      - default
+      - hivemind
+
+networks:
+  hivemind:
+    external: true
