@@ -6,8 +6,8 @@ out who it belongs to. A site that names itself (`/verify?site=hive`) admits
 the users granted it; a site that does not admits admins only, so adding a
 user here lets nobody new into a site that never asked for one.
 
-Users, groups and site grants are managed through /admin, behind the service token
-(env AUTH_SERVICE_ADMIN_TOKEN). Users are never deleted, only disabled.
+Users, groups and site grants are managed through /admin, behind an admin's own sign-in
+(or the service token, env AUTH_SERVICE_ADMIN_TOKEN, for sites that use it). Users are never deleted, only disabled.
 """
 
 from __future__ import annotations
@@ -108,14 +108,24 @@ def _user_view(user: dict) -> dict:
 
 
 def _require_admin(request: Request) -> None:
-    """Gate for every /admin route: the service bearer, compared as bytes."""
-    if not settings.admin_token:
-        raise HTTPException(503, "admin API not configured")
+    """Gate for every /admin route: a signed-in member of `admins` (their own
+    session, as a bearer or the cookie), or the service bearer, which stays for
+    the sites that already use it. A signed-in person who is not an
+    administrator is refused with 403; anyone else with 401."""
     presented = auth.bearer(request.headers.get("authorization")) or ""
-    if not hmac.compare_digest(
+    if settings.admin_token and hmac.compare_digest(
         presented.encode("utf-8"), settings.admin_token.encode("utf-8")
     ):
-        raise HTTPException(401, "admin token required")
+        return
+    user = _current_user(request)
+    if user:
+        groups = registry.groups_for(user["user_id"])
+        if registry_mod.ADMINS in (g.lower() for g in groups):
+            return
+        raise HTTPException(403, "admins only")
+    if not settings.admin_token:
+        raise HTTPException(503, "admin API not configured")
+    raise HTTPException(401, "admin sign-in required")
 
 
 def _user_or_404(username: str) -> dict:

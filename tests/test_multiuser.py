@@ -274,9 +274,11 @@ def test_admin_routes_refuse_missing_wrong_or_user_credentials(client):
     sloan = _token(client, "sloan", "temp-pw-1")
     daniel = _token(client, SEED_USERNAME, SEED_PASSWORD)
     for method, path, body in ADMIN_CALLS:
-        for headers in ({}, {"Authorization": "Bearer wrong"}, _bearer(sloan), _bearer(daniel)):
+        for headers in ({}, {"Authorization": "Bearer wrong"}):
             resp = _call(client, method, path, body, headers)
             assert resp.status_code == 401, (method, path, headers, resp.status_code)
+        resp = _call(client, method, path, body, _bearer(sloan))
+        assert resp.status_code == 403, (method, path, resp.status_code)
     # None of them took effect.
     assert _login(client, SEED_USERNAME, SEED_PASSWORD).status_code == 200
 
@@ -391,3 +393,23 @@ def test_with_a_second_enabled_admin_the_first_can_be_disabled(client):
     assert client.patch("/admin/users/daniel", json={"disabled": True}, headers=ADMIN).status_code == 200
     # Now sloan is the last enabled admin.
     assert client.delete("/admin/groups/admins/members/sloan", headers=ADMIN).status_code == 409
+
+
+def test_admin_routes_accept_an_administrators_own_sign_in_and_refuse_another_person(client):
+    _create(client, "sloan")
+    sloan = _token(client, "sloan", "temp-pw-1")
+    daniel = _token(client, SEED_USERNAME, SEED_PASSWORD)
+    assert client.get("/admin/users", headers=_bearer(daniel)).status_code == 200
+    made = client.post("/admin/users", json={"username": "casey"}, headers=_bearer(daniel))
+    assert made.status_code == 201
+    client.cookies.set("auth_session", daniel)
+    assert client.get("/admin/groups").status_code == 200
+    client.cookies.clear()
+    assert client.get("/admin/users", headers=_bearer(sloan)).status_code == 403
+    assert client.get("/admin/users/casey", headers=_bearer(sloan)).status_code == 403
+
+
+def test_admin_routes_accept_an_administrators_sign_in_with_no_service_token_set(client_without_admin_token):
+    c = client_without_admin_token
+    daniel = _token(c, SEED_USERNAME, SEED_PASSWORD)
+    assert c.get("/admin/users", headers=_bearer(daniel)).status_code == 200
