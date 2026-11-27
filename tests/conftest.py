@@ -7,10 +7,13 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-ADMIN_TOKEN = "test-admin-token"  # secret-guard: allow (invented test value)
+# The signed-in administrator's bearer, refreshed in place by the `client`
+# fixture (a new db and a new session every test). There is no service token.
+ADMIN: dict = {}
+SEED_ADMIN = ("daniel", "correct horse battery staple")
 
 
-def _fresh_server(tmp_path, monkeypatch, admin_token: str):
+def _fresh_server(tmp_path, monkeypatch):
     """A freshly-imported server module pointed at its own throwaway db.
 
     server.py builds its Registry and runs the seed at import time, so each
@@ -23,7 +26,7 @@ def _fresh_server(tmp_path, monkeypatch, admin_token: str):
     monkeypatch.setenv("AUTH_SEED_PASSWORD", "correct horse battery staple")
     monkeypatch.setenv("AUTH_RESET_EMAIL", "")
     monkeypatch.setenv("SMTP_HOST", "")
-    monkeypatch.setenv("AUTH_SERVICE_ADMIN_TOKEN", admin_token)
+    monkeypatch.delenv("AUTH_SERVICE_ADMIN_TOKEN", raising=False)
 
     for name in ("server", "config"):
         sys.modules.pop(name, None)
@@ -32,17 +35,13 @@ def _fresh_server(tmp_path, monkeypatch, admin_token: str):
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
-    server = _fresh_server(tmp_path, monkeypatch, ADMIN_TOKEN)
+    server = _fresh_server(tmp_path, monkeypatch)
     with TestClient(server.app) as c:
-        yield c
-    server.registry.close()
-    sys.modules.pop("server", None)
-
-
-@pytest.fixture()
-def client_without_admin_token(tmp_path, monkeypatch):
-    server = _fresh_server(tmp_path, monkeypatch, "")
-    with TestClient(server.app) as c:
+        resp = c.post("/login", json={"username": SEED_ADMIN[0], "password": SEED_ADMIN[1]})
+        assert resp.status_code == 200
+        ADMIN.clear()
+        ADMIN["Authorization"] = f"Bearer {resp.json()['token']}"
+        c.cookies.clear()
         yield c
     server.registry.close()
     sys.modules.pop("server", None)

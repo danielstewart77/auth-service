@@ -16,8 +16,8 @@ and disabling, an admin reset or a password change ends the user's sessions.
 The last enabled admin cannot be disabled or taken out of `admins`. Users
 are never deleted.
 
-`/admin/*` manages users, groups and site grants behind the service bearer
-`AUTH_SERVICE_ADMIN_TOKEN`. An admin-created user with a temporary password
+`/admin/*` manages users, groups and site grants for a signed-in
+administrator only, using their own sign-in; there is no shared service token. An admin-created user with a temporary password
 must change it (`POST /password/change`) — `must_change` is reported on
 `/login` and `/verify`, and the calling site enforces it. A user created
 without a password cannot sign in by password at all.

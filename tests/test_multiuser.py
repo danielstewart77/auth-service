@@ -1,10 +1,9 @@
 """Users, groups, site grants and the admin API (multi-user hive, wave one)."""
 
-from conftest import ADMIN_TOKEN
+from conftest import ADMIN
 
 SEED_USERNAME = "daniel"
 SEED_PASSWORD = "correct horse battery staple"
-ADMIN = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 
 
 def _login(client, username, password):
@@ -283,12 +282,15 @@ def test_admin_routes_refuse_missing_wrong_or_user_credentials(client):
     assert _login(client, SEED_USERNAME, SEED_PASSWORD).status_code == 200
 
 
-def test_admin_routes_are_503_when_no_admin_token_is_configured(client_without_admin_token):
+def test_admin_routes_refuse_a_service_token_even_when_the_old_setting_is_present(client, monkeypatch):
+    # The shared key is gone: whatever value the old setting held is just a wrong bearer.
+    monkeypatch.setenv("AUTH_SERVICE_ADMIN_TOKEN", "old-shared-key")
+    import importlib, sys
+    sys.modules.pop("config", None)
+    importlib.reload(sys.modules["server"])
     for method, path, body in ADMIN_CALLS:
-        resp = _call(client_without_admin_token, method, path, body, {"Authorization": "Bearer "})
-        assert resp.status_code == 503, (method, path)
-        resp = _call(client_without_admin_token, method, path, body, {"Authorization": "Bearer x"})
-        assert resp.status_code == 503, (method, path)
+        resp = _call(client, method, path, body, {"Authorization": "Bearer old-shared-key"})
+        assert resp.status_code == 401, (method, path, resp.status_code)
 
 
 # -- T6 / T13: admins and sites at /verify --------------------------------------
@@ -391,8 +393,9 @@ def test_with_a_second_enabled_admin_the_first_can_be_disabled(client):
     _create(client, "sloan")
     client.put("/admin/groups/admins/members/sloan", headers=ADMIN)
     assert client.patch("/admin/users/daniel", json={"disabled": True}, headers=ADMIN).status_code == 200
-    # Now sloan is the last enabled admin.
-    assert client.delete("/admin/groups/admins/members/sloan", headers=ADMIN).status_code == 409
+    # Daniel's session ended with the disable; sloan, now the last enabled admin, acts as themself.
+    sloan = _bearer(_token(client, "sloan", "temp-pw-1"))
+    assert client.delete("/admin/groups/admins/members/sloan", headers=sloan).status_code == 409
 
 
 def test_admin_routes_accept_an_administrators_own_sign_in_and_refuse_another_person(client):
@@ -407,9 +410,3 @@ def test_admin_routes_accept_an_administrators_own_sign_in_and_refuse_another_pe
     client.cookies.clear()
     assert client.get("/admin/users", headers=_bearer(sloan)).status_code == 403
     assert client.get("/admin/users/casey", headers=_bearer(sloan)).status_code == 403
-
-
-def test_admin_routes_accept_an_administrators_sign_in_with_no_service_token_set(client_without_admin_token):
-    c = client_without_admin_token
-    daniel = _token(c, SEED_USERNAME, SEED_PASSWORD)
-    assert c.get("/admin/users", headers=_bearer(daniel)).status_code == 200

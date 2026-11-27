@@ -6,13 +6,12 @@ out who it belongs to. A site that names itself (`/verify?site=hive`) admits
 the users granted it; a site that does not admits admins only, so adding a
 user here lets nobody new into a site that never asked for one.
 
-Users, groups and site grants are managed through /admin, behind an admin's own sign-in
-(or the service token, env AUTH_SERVICE_ADMIN_TOKEN, for sites that use it). Users are never deleted, only disabled.
+Users, groups and site grants are managed through /admin, behind an administrator's own
+sign-in; no shared service token exists. Users are never deleted, only disabled.
 """
 
 from __future__ import annotations
 
-import hmac
 import logging
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
@@ -108,24 +107,16 @@ def _user_view(user: dict) -> dict:
 
 
 def _require_admin(request: Request) -> None:
-    """Gate for every /admin route: a signed-in member of `admins` (their own
-    session, as a bearer or the cookie), or the service bearer, which stays for
-    the sites that already use it. A signed-in person who is not an
-    administrator is refused with 403; anyone else with 401."""
-    presented = auth.bearer(request.headers.get("authorization")) or ""
-    if settings.admin_token and hmac.compare_digest(
-        presented.encode("utf-8"), settings.admin_token.encode("utf-8")
-    ):
-        return
+    """Gate for every /admin route: a signed-in member of `admins`, by their own
+    session (a bearer or the cookie). No shared service key is accepted. A
+    signed-in person who is not an administrator is refused with 403; anyone
+    else, including a caller presenting any other bearer, with 401."""
     user = _current_user(request)
-    if user:
-        groups = registry.groups_for(user["user_id"])
-        if registry_mod.ADMINS in (g.lower() for g in groups):
-            return
+    if not user:
+        raise HTTPException(401, "admin sign-in required")
+    groups = registry.groups_for(user["user_id"])
+    if registry_mod.ADMINS not in (g.lower() for g in groups):
         raise HTTPException(403, "admins only")
-    if not settings.admin_token:
-        raise HTTPException(503, "admin API not configured")
-    raise HTTPException(401, "admin sign-in required")
 
 
 def _user_or_404(username: str) -> dict:
